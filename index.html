@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UOB Malaysia Gold Prices</title>
+<style>
+:root{--bg:#faf8f3;--card:#fff;--ink:#2a2418;--mute:#7a705c;--line:#e6dfcf;--gold:#b8860b;--buy:#2f7d5b;--bad:#b3392f}
+@media (prefers-color-scheme:dark){:root{--bg:#17140d;--card:#221e14;--ink:#f1ead8;--mute:#a69b82;--line:#3a3322;--gold:#e0b043;--buy:#5fc59a;--bad:#ef7b70}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 40px}
+h1{font:600 22px Georgia,serif;margin:0 0 2px}
+.sub{color:var(--mute);font-size:13px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.stat small{display:block;color:var(--mute);font-size:12px}
+.stat b{font:600 20px Georgia,serif}
+.up{color:var(--buy)}.down{color:var(--bad)}
+.bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+select,button{font:inherit;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button{font-size:13px}button.on{background:var(--gold);border-color:var(--gold);color:#fff}
+.legend{font-size:12px;color:var(--mute);display:flex;gap:14px;margin-bottom:4px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+.scroll{overflow-x:auto}svg{width:100%;height:auto;display:block}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:500;font-size:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>UOB Malaysia gold prices</h1>
+<div class="sub" id="sub">Loading…</div>
+<div class="card"><div class="stats" id="stats"></div></div>
+<div class="card">
+<div class="bar"><select id="p"></select><span id="tabs" class="bar" style="margin:0"></span></div>
+<div class="legend"><span><i class="dot" style="background:var(--gold)"></i>UOB sells (RM)</span><span><i class="dot" style="background:var(--buy)"></i>UOB buys (RM)</span></div>
+<div class="scroll"><svg id="chart" viewBox="0 0 720 300" role="img" aria-label="Gold price chart"></svg></div>
+</div>
+<div class="card"><b>Recent records</b>
+<div class="scroll"><table><thead><tr><th>Date</th><th>Buy</th><th>Sell</th><th>Spread</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</main>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)},fmt=function(n){return Number(n).toFixed(2)};
+var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
+var recs=[],items=[],prod='',range=30;
+
+function split(l){var o=[],c='',q=false;for(var i=0;i<l.length;i++){var ch=l[i];if(ch==='"')q=!q;else if(ch===','&&!q){o.push(c);c=''}else c+=ch}o.push(c);return o}
+
+fetch('data/uob_gold_prices.csv?v='+Date.now()).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){
+  var L=t.split(/\r?\n/).filter(Boolean),h=split(L[0]).map(function(x){return x.trim().toLowerCase()}),ix=function(k){return h.indexOf(k)},map={};
+  for(var i=1;i<L.length;i++){
+    var c=split(L[i]),it=((c[ix('item')]||'')+' '+(c[ix('size')]||'')).trim(),r={date:c[ix('date')],item:it,sell:parseFloat(c[ix('selling')]),buy:parseFloat(c[ix('buying')])};
+    if(!r.date||!it||isNaN(r.sell)||isNaN(r.buy))continue;
+    map[r.date+'|'+it]=r;if(items.indexOf(it)<0)items.push(it);
+  }
+  recs=Object.keys(map).map(function(k){return map[k]});
+  if(!recs.length)throw 0;
+  prod=items[0];
+  $('p').innerHTML=items.map(function(k){return '<option>'+esc(k)+'</option>'}).join('');
+  $('p').onchange=function(){prod=this.value;render()};
+  [['7D',7],['30D',30],['90D',90],['All',0]].forEach(function(t){var b=document.createElement('button');b.textContent=t[0];b.dataset.r=t[1];b.onclick=function(){range=t[1];render()};$('tabs').appendChild(b)});
+  var last=recs.map(function(r){return r.date}).sort().pop();
+  $('sub').textContent='Updated daily around 11am (Malaysia time). Latest record: '+last+'.';
+  render();
+}).catch(function(){$('sub').textContent='No data yet. Run the GitHub workflow once to create data/uob_gold_prices.csv.'});
+
+function render(){
+  var all=recs.filter(function(r){return r.item===prod}).sort(function(a,b){return a.date<b.date?-1:1}),data=all;
+  if(range&&all.length){var cut=new Date(new Date(all[all.length-1].date).getTime()-range*864e5).toISOString().slice(0,10);data=all.filter(function(r){return r.date>=cut})}
+  Array.prototype.forEach.call($('tabs').children,function(b){b.className=(+b.dataset.r===range)?'on':''});
+  if(!all.length)return;
+  var l=all[all.length-1],p=all[all.length-2],ch=p?l.sell-p.sell:0,pc=p?ch/p.sell*100:0,ss=data.map(function(r){return r.sell});
+  $('stats').innerHTML='<div class="stat"><small>Latest sell ('+esc(l.date)+')</small><b>RM '+fmt(l.sell)+'</b></div><div class="stat"><small>Latest buy</small><b>RM '+fmt(l.buy)+'</b></div><div class="stat"><small>Change vs previous day</small><b class="'+(ch>=0?'up':'down')+'">'+(ch>=0?'+':'')+fmt(ch)+' ('+pc.toFixed(2)+'%)</b></div><div class="stat"><small>Sell high / low (view)</small><b>'+fmt(Math.max.apply(null,ss))+' / '+fmt(Math.min.apply(null,ss))+'</b></div>';
+  $('rows').innerHTML=all.slice(-30).reverse().map(function(r){return '<tr><td>'+esc(r.date)+'</td><td>'+fmt(r.buy)+'</td><td>'+fmt(r.sell)+'</td><td>'+fmt(r.sell-r.buy)+'</td></tr>'}).join('');
+  var W=720,H=300,Lm=56,R=16,T=14,B=34,svg=$('chart'),v=[];data.forEach(function(r){v.push(r.buy,r.sell)});
+  var mn=Math.min.apply(null,v),mx=Math.max.apply(null,v),pad=(mx-mn)*0.1||1;mn-=pad;mx+=pad;
+  var n=data.length,X=function(i){return n===1?(Lm+W-R)/2:Lm+i*(W-Lm-R)/(n-1)},Y=function(a){return T+(mx-a)/(mx-mn)*(H-T-B)},s='';
+  for(var g=0;g<=4;g++){var a=mn+(mx-mn)*g/4,y=Y(a);s+='<line x1="'+Lm+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(Lm-6)+'" y="'+(y+4)+'" text-anchor="end" font-size="11" fill="var(--mute)">'+a.toFixed(1)+'</text>'}
+  var st=Math.max(1,Math.ceil(n/6));
+  data.forEach(function(r,i){if(i%st===0||i===n-1)s+='<text x="'+X(i)+'" y="'+(H-12)+'" text-anchor="middle" font-size="11" fill="var(--mute)">'+esc(r.date.slice(5))+'</text>'});
+  function line(k,c){return '<polyline points="'+data.map(function(r,i){return X(i)+','+Y(r[k])}).join(' ')+'" fill="none" stroke="'+c+'" stroke-width="2.2" stroke-linejoin="round"/>'+(n>60?'':data.map(function(r,i){return '<circle cx="'+X(i)+'" cy="'+Y(r[k])+'" r="3.5" fill="'+c+'"><title>'+esc(r.date)+' · RM '+fmt(r[k])+'</title></circle>'}).join(''))}
+  svg.innerHTML=s+line('buy','var(--buy)')+line('sell','var(--gold)');
+}
+})();
+</script>
+</body>
+</html>
