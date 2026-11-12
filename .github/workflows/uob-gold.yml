@@ -5,9 +5,17 @@ on:
   workflow_dispatch: {}    # lets you run it by hand from the Actions tab
 permissions:
   contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
 jobs:
   scrape:
     runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -27,3 +35,11 @@ jobs:
           git config user.email "gold-bot@users.noreply.github.com"
           git add data/uob_gold_prices.csv
           git diff --cached --quiet || (git commit -m "UOB gold prices $(date -u +%F)" && git push)
+      - name: Build site folder
+        run: mkdir -p _site/data && cp index.html _site/ && cp data/uob_gold_prices.csv _site/data/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
