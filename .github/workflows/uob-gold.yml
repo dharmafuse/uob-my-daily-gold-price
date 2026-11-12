@@ -1,0 +1,29 @@
+name: UOB gold price
+on:
+  schedule:
+    - cron: "0 3 * * *"   # 03:00 UTC = 11:00 Malaysia time (GitHub may start it a few minutes late)
+  workflow_dispatch: {}    # lets you run it by hand from the Actions tab
+permissions:
+  contents: write
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install playwright && playwright install --with-deps chromium
+      - run: python scrape_uob_gold.py
+      - name: Save debug files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug
+          path: debug/
+      - name: Commit CSV
+        run: |
+          git config user.name "gold-bot"
+          git config user.email "gold-bot@users.noreply.github.com"
+          git add data/uob_gold_prices.csv
+          git diff --cached --quiet || (git commit -m "UOB gold prices $(date -u +%F)" && git push)
